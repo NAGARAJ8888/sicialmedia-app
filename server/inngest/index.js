@@ -1,5 +1,7 @@
 import { Inngest } from "inngest";
 import User from "./../models/user.js";
+import Connection from "../models/connection.js";
+import sendEmail from "../config/nodeMailer.js";
 
 // Create a client to send and receive events
 export const inngest = new Inngest({ id: "social-media-app" });
@@ -55,4 +57,89 @@ const SyncUserDeletion = inngest.createFunction(
     }
 );
 
-export const functions = [SyncUserCreation, SyncUserUpdation, SyncUserDeletion];
+const sendConnectionRequestRemainder = inngest.createFunction(
+  {id: "send-new connection-request-reminder"},
+  {event: "app/connection-request"},
+  async ({ event, step }) =>{
+    const {connectionId} = event.data;
+
+    await step.run('send-connection-request-mail', async () => {
+      const connection = await Connection.findById(connectionId).populate('from_user_id to_user_id');
+      const subject = `👏 New Connection Request`;
+      const body = `
+        <div style="font-family: Arial, sans-serif; background: #f7f7f7; padding: 24px;">
+          <div style="max-width: 480px; margin: 0 auto; background: #ffffff; border-radius: 8px; box-shadow: 0px 2px 8px rgba(0,0,0,0.07); overflow: hidden;">
+            <div style="background: #4f8cff; color: #fff; padding: 20px 32px; font-size: 22px; font-weight: 600;">
+              👏 New Connection Request
+            </div>
+            <div style="padding: 32px 32px 24px 32px; color: #333;">
+              <p style="font-size:16px; margin-top: 0;">Hi <b>${connection.to_user_id?.full_name || "there"}</b>,</p>
+              <p style="font-size:16px;">
+                <b>${connection.from_user_id?.full_name || "A user"}</b> has sent you a connection request.
+              </p>
+              <div style="text-align: center; margin: 25px 0;">
+                <a href="${process.env.FRONTEND_URL}/connections" style="background: #4f8cff; color: #fff; text-decoration: none; display: inline-block; border-radius: 5px; padding: 12px 30px; font-size: 16px; font-weight: 500;">
+                  View Request
+                </a>
+              </div>
+              <p style="font-size:13px; color:#888; margin-bottom: 0;">
+                If you do not wish to act on this request, you can safely ignore this email.
+              </p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      await sendEmail({
+        to: connection.to_user_id.email,
+        subject,
+        body
+      })
+
+    })
+
+    const in24Hours = new Date(Date.now() + 24 * 60 * 60 *1000)
+    await step.sleepUntil("wait-for-24-hours", in24Hours)
+    await step.run('send-connection-request-reminder', async () => {
+      const connection = await Connection.findById(connectionId).populate('from_user_id', 'to_user_id');
+      if(connection.status === "accepted"){
+        return {message: "Already accepted"}
+      }
+
+      const subject = `👏 New Connection Request`;
+      const body = `
+        <div style="font-family: Arial, sans-serif; background: #f7f7f7; padding: 24px;">
+          <div style="max-width: 480px; margin: 0 auto; background: #ffffff; border-radius: 8px; box-shadow: 0px 2px 8px rgba(0,0,0,0.07); overflow: hidden;">
+            <div style="background: #4f8cff; color: #fff; padding: 20px 32px; font-size: 22px; font-weight: 600;">
+              👏 New Connection Request
+            </div>
+            <div style="padding: 32px 32px 24px 32px; color: #333;">
+              <p style="font-size:16px; margin-top: 0;">Hi <b>${connection.to_user_id?.full_name || "there"}</b>,</p>
+              <p style="font-size:16px;">
+                <b>${connection.from_user_id?.full_name || "A user"}</b> has sent you a connection request.
+              </p>
+              <div style="text-align: center; margin: 25px 0;">
+                <a href="${process.env.FRONTEND_URL}/connections" style="background: #4f8cff; color: #fff; text-decoration: none; display: inline-block; border-radius: 5px; padding: 12px 30px; font-size: 16px; font-weight: 500;">
+                  View Request
+                </a>
+              </div>
+              <p style="font-size:13px; color:#888; margin-bottom: 0;">
+                If you do not wish to act on this request, you can safely ignore this email.
+              </p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      await sendEmail({
+        to: connection.to_user_id.email,
+        subject,
+        body
+      })
+        return {message: "Reminder sent."}
+    })
+
+  }
+)
+
+export const functions = [SyncUserCreation, SyncUserUpdation, SyncUserDeletion, sendConnectionRequestRemainder];
