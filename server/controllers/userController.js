@@ -1,6 +1,7 @@
 import User from '../models/user.js';
 import imagekit from '../config/imagekit.js';
 import Connection from '../models/connection.js';
+import { connect } from 'http2';
 
 //get user data
 export const getUserData = async (req, res) => {
@@ -37,13 +38,14 @@ export const updateUserData = async (req, res) => {
             const fs = await import('fs/promises');
             
             try {
-                const buffer = await fs.readFile(file.path);
+                const buffer = file.buffer;
                 const base64File = buffer.toString("base64");
 
                 const response = await imagekit.files.upload({
                 file: `data:${file.mimetype};base64,${base64File}`,
                 fileName: file.originalname,
                 });
+
 
                 console.log('ImageKit upload successful:', response.filePath);
 
@@ -83,13 +85,14 @@ export const updateUserData = async (req, res) => {
             const fs = await import('fs/promises');
             
             try {
-                const buffer = await fs.readFile(file.path);
+                const buffer = file.buffer;
                 const base64File = buffer.toString("base64");
 
                 const response = await imagekit.files.upload({
                 file: `data:${file.mimetype};base64,${base64File}`,
                 fileName: file.originalname,
                 });
+
 
                 console.log('ImageKit upload successful:', response.filePath);
 
@@ -320,16 +323,23 @@ export const acceptConnectionRequest = async (req, res) => {
 
         // Find the connection where the current user is the recipient and the request is pending
         const connection = await Connection.findOne({
-            from_user_id: fromUserId,
+            from_user_id: id,
             to_user_id: userId,
-            status: "pending"
         });
 
         if (!connection) {
             return res.status(404).json({ success: false, message: "Connection request not found." });
         }
 
-        connection.status = "accepted";
+        const user = await User.findById(userId);
+        user.connections.push(id);
+        await connection.save();
+
+        const toUser = await User.findById(id);
+        toUser.connections.push(userId);
+        await toUser.save();
+
+        connection.status = 'accepted';
         await connection.save();
 
         // Optionally, add references in User model for connections if not already handled elsewhere.
