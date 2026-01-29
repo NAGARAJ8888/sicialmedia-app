@@ -1,14 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { dummyUserData } from '../assets/assets'
 import { X, Image as ImageIcon, Smile, Hash, XCircle, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useSelector } from 'react-redux'
+import { useAuth } from '@clerk/clerk-react'
+import api from '../api/axios'
 
 const CreatePost = () => {
     const navigate = useNavigate()
     const fileInputRef = useRef(null)
     const textareaRef = useRef(null)
     const emojiPickerRef = useRef(null)
+    const { getToken } = useAuth()
     
     const [content, setContent] = useState('')
     const [images, setImages] = useState([])
@@ -18,6 +21,8 @@ const CreatePost = () => {
 
     const maxCharacters = 2000
     const remainingCharacters = maxCharacters - content.length
+
+    const user = useSelector((state) => state.user.value)
 
     // Common emojis organized by category
     const emojiCategories = {
@@ -94,8 +99,12 @@ const CreatePost = () => {
         setIsPosting(true)
 
         try {
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1500))
+            // Get authentication token
+            const token = await getToken()
+            if (!token) {
+                toast.error('Authentication required. Please login again.')
+                return
+            }
 
             // Determine post type
             let postType = 'text'
@@ -105,16 +114,24 @@ const CreatePost = () => {
                 postType = 'image'
             }
 
-            // In a real app, you would upload images and create the post here
-            const newPost = {
-                content: content.trim(),
-                image_urls: [], // Would be URLs from uploaded images
-                post_type: postType,
-                user: dummyUserData,
-                createdAt: new Date().toISOString(),
-            }
+            // Create FormData for multipart request
+            const formData = new FormData()
+            formData.append('content', content.trim())
+            formData.append('post_type', postType)
 
-            console.log('Post created:', newPost)
+            // Append images to FormData
+            images.forEach((image) => {
+                formData.append('images', image)
+            })
+
+            // Make API call with authorization
+            const response = await api.post('/api/post/add', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    Authorization: `Bearer ${token}`,
+                },
+            })
+
             toast.success('Post created successfully!')
             
             // Reset form
@@ -125,7 +142,7 @@ const CreatePost = () => {
             // Navigate back to feed
             navigate('/app')
         } catch (error) {
-            toast.error('Failed to create post. Please try again.')
+            toast.error(error.response?.data?.message || 'Failed to create post. Please try again.')
             console.error('Error creating post:', error)
         } finally {
             setIsPosting(false)
@@ -201,26 +218,26 @@ const CreatePost = () => {
                     {/* User Info */}
                     <div className="flex items-center gap-3 p-4 border-b border-gray-100">
                         <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 shrink-0">
-                            {dummyUserData.profile_picture ? (
+                            {user.profile_picture ? (
                                 <img
-                                    src={dummyUserData.profile_picture}
-                                    alt={dummyUserData.full_name || dummyUserData.username}
+                                    src={user.profile_picture}
+                                    alt={user.full_name || user.username}
                                     className="w-full h-full object-cover"
                                     loading="lazy"
                                 />
                             ) : (
                                 <div className="w-full h-full bg-purple-500 flex items-center justify-center">
                                     <span className="text-white font-semibold text-lg">
-                                        {dummyUserData.full_name?.charAt(0)?.toUpperCase() || dummyUserData.username?.charAt(0)?.toUpperCase() || 'U'}
+                                        {user.full_name?.charAt(0)?.toUpperCase() || user.username?.charAt(0)?.toUpperCase() || 'U'}
                                     </span>
                                 </div>
                             )}
                         </div>
                         <div>
                             <p className="text-sm font-semibold text-gray-900">
-                                {dummyUserData.full_name || dummyUserData.username}
+                                {user.full_name || user.username}
                             </p>
-                            <p className="text-xs text-gray-500">@{dummyUserData.username}</p>
+                            <p className="text-xs text-gray-500">@{user.username}</p>
                         </div>
                     </div>
 
@@ -407,25 +424,25 @@ const CreatePost = () => {
                                 <div className="flex items-center justify-between p-4 pb-3">
                                     <div className="flex items-center gap-3 flex-1 min-w-0">
                                         <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 shrink-0">
-                                            {dummyUserData.profile_picture ? (
+                                            {user.profile_picture ? (
                                                 <img
-                                                    src={dummyUserData.profile_picture}
-                                                    alt={dummyUserData.full_name || dummyUserData.username}
+                                                    src={user.profile_picture}
+                                                    alt={user.full_name || user.username}
                                                     className="w-full h-full object-cover"
                                                 />
                                             ) : (
                                                 <div className="w-full h-full bg-purple-500 flex items-center justify-center">
                                                     <span className="text-white font-semibold text-sm">
-                                                        {dummyUserData.full_name?.charAt(0)?.toUpperCase() || dummyUserData.username?.charAt(0)?.toUpperCase() || 'U'}
+                                                        {user.full_name?.charAt(0)?.toUpperCase() || user.username?.charAt(0)?.toUpperCase() || 'U'}
                                                     </span>
                                                 </div>
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-semibold text-gray-900 truncate">
-                                                {dummyUserData.full_name || dummyUserData.username}
+                                                {user.full_name || user.username}
                                             </p>
-                                            <p className="text-xs text-gray-500">@{dummyUserData.username}</p>
+                                            <p className="text-xs text-gray-500">@{user.username}</p>
                                         </div>
                                     </div>
                                 </div>

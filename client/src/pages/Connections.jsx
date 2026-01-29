@@ -1,30 +1,49 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { dummyConnectionsData, dummyFollowersData, dummyFollowingData, dummyPendingConnectionsData, dummyUserData } from '../assets/assets'
 import { Search, MessageCircle, UserPlus, UserCheck, UserX, Check, X, Users } from 'lucide-react'
 import Loading from '../components/Loading'
+import { useSelector, useDispatch } from 'react-redux'
+import { useAuth } from '@clerk/clerk-react'
+import toast from 'react-hot-toast'
+import { 
+    fetchUserConnections, 
+    followUser, 
+    unfollowUser, 
+    acceptConnectionRequest,
+    sendConnectionRequest,
+} from '../features/connections/connectionsSlice'
+import { optimisticUpdate } from '../features/user/userSlice'
 
 const Connections = () => {
     const navigate = useNavigate()
+    const dispatch = useDispatch()
+    const { getToken } = useAuth()
     const [activeTab, setActiveTab] = useState('all')
-    const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
-    const [connections, setConnections] = useState([])
-    const [followers, setFollowers] = useState([])
-    const [following, setFollowing] = useState([])
-    const [pending, setPending] = useState([])
+    const [isProcessing, setIsProcessing] = useState({})
 
+    const connections = useSelector((state) => state.connections.connections || [])
+    const followers = useSelector((state) => state.connections.followers || [])
+    const following = useSelector((state) => state.connections.following || [])
+    const pending = useSelector((state) => state.connections.pendingConnections || [])
+    const currentUser = useSelector((state) => state.user.value)
+    const loading = useSelector((state) => state.connections.loading)
+
+    // Fetch connections on component mount
     useEffect(() => {
-        // Simulate API call
         const fetchConnections = async () => {
-            setConnections(dummyConnectionsData)
-            setFollowers(dummyFollowersData)
-            setFollowing(dummyFollowingData)
-            setPending(dummyPendingConnectionsData)
-            setLoading(false)
+            try {
+                const token = await getToken()
+                if (token) {
+                    dispatch(fetchUserConnections(token))
+                }
+            } catch (error) {
+                console.error('Error fetching connections:', error)
+            }
         }
+
         fetchConnections()
-    }, [])
+    }, [dispatch, getToken])
 
     const getCurrentData = () => {
         switch (activeTab) {
@@ -50,24 +69,100 @@ const Connections = () => {
         )
     })
 
-    const handleFollow = (userId) => {
-        // Handle follow action
-        console.log('Follow user:', userId)
+    const handleFollow = async (userId) => {
+        setIsProcessing(prev => ({ ...prev, [userId]: true }))
+        const previousFollowing = currentUser?.following || []
+        const followedUser = filteredData.find(u => u._id === userId)
+        
+        try {
+            const token = await getToken()
+            if (token) {
+                // Optimistic update - update UI immediately
+                const updatedFollowing = [...previousFollowing, userId]
+                dispatch(optimisticUpdate({ following: updatedFollowing }))
+                
+                // Make API call
+                await dispatch(followUser({ token, followId: userId }))
+                
+                // Refetch connections to get complete user data
+                await dispatch(fetchUserConnections(token))
+                toast.success('Following user')
+            }
+        } catch (error) {
+            // Revert optimistic update on error
+            dispatch(optimisticUpdate({ following: previousFollowing }))
+            toast.error('Failed to follow user')
+            console.error('Error following user:', error)
+        } finally {
+            setIsProcessing(prev => ({ ...prev, [userId]: false }))
+        }
     }
 
-    const handleUnfollow = (userId) => {
-        // Handle unfollow action
-        console.log('Unfollow user:', userId)
+    const handleUnfollow = async (userId) => {
+        setIsProcessing(prev => ({ ...prev, [userId]: true }))
+        const previousFollowing = currentUser?.following || []
+        
+        try {
+            const token = await getToken()
+            if (token) {
+                // Optimistic update - update UI immediately
+                const updatedFollowing = previousFollowing.filter(id => id !== userId)
+                dispatch(optimisticUpdate({ following: updatedFollowing }))
+                
+                // Make API call
+                await dispatch(unfollowUser({ token, unfollowId: userId }))
+                
+                // Refetch connections to get updated following list
+                await dispatch(fetchUserConnections(token))
+                toast.success('Unfollowed user')
+            }
+        } catch (error) {
+            // Revert optimistic update on error
+            dispatch(optimisticUpdate({ following: previousFollowing }))
+            toast.error('Failed to unfollow user')
+            console.error('Error unfollowing user:', error)
+        } finally {
+            setIsProcessing(prev => ({ ...prev, [userId]: false }))
+        }
     }
 
-    const handleAccept = (userId) => {
-        // Handle accept connection request
-        console.log('Accept connection:', userId)
+    const handleAccept = async (userId) => {
+        setIsProcessing(prev => ({ ...prev, [userId]: true }))
+        try {
+            const token = await getToken()
+            if (token) {
+                await dispatch(acceptConnectionRequest({ token, userId }))
+                toast.success('Connection accepted')
+            }
+        } catch (error) {
+            toast.error('Failed to accept connection')
+            console.error('Error accepting connection:', error)
+        } finally {
+            setIsProcessing(prev => ({ ...prev, [userId]: false }))
+        }
     }
 
     const handleReject = (userId) => {
         // Handle reject connection request
         console.log('Reject connection:', userId)
+    }
+
+    const handleSendRequest = async (userId) => {
+        setIsProcessing(prev => ({ ...prev, [userId]: true }))
+        try {
+            const token = await getToken()
+            if (token) {
+                await dispatch(sendConnectionRequest({ token, id: userId }))
+                // Refresh connections so pending/connection lists update
+                await dispatch(fetchUserConnections(token))
+                toast.success('Connection request sent')
+            }
+        } catch (error) {
+            console.error('Error sending connection request:', error)
+            toast.error('Failed to send connection request')
+        } finally {
+            setIsProcessing(prev => ({ ...prev, [userId]: false }))
+        }
     }
 
     const handleMessage = (userId) => {
@@ -144,9 +239,10 @@ const Connections = () => {
                 {filteredData.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {filteredData.map((user) => {
-                            const isCurrentUser = user._id === dummyUserData._id
-                            const isFollowing = dummyUserData.following?.includes(user._id)
-                            const isFollower = dummyUserData.followers?.includes(user._id)
+                            const isCurrentUser = currentUser && user._id === currentUser._id
+                            const isFollowing = currentUser?.following?.includes(user._id)
+                            const isFollower = currentUser?.followers?.includes(user._id)
+                            const isConnected = connections.some(c => c._id === user._id)
                             
                             return (
                                 <div
@@ -230,19 +326,21 @@ const Connections = () => {
                                                     <>
                                                         <button
                                                             onClick={() => handleAccept(user._id)}
-                                                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors"
+                                                            disabled={isProcessing[user._id]}
+                                                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                         >
                                                             <Check className="w-4 h-4" />
                                                             Accept
                                                         </button>
                                                         <button
                                                             onClick={() => handleReject(user._id)}
-                                                            className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
+                                                            disabled={isProcessing[user._id]}
+                                                            className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                         >
                                                             <X className="w-4 h-4" />
                                                         </button>
                                                     </>
-                                                ) : (
+                                                ) : activeTab === 'all' ? (
                                                     <>
                                                         <button
                                                             onClick={() => handleMessage(user._id)}
@@ -254,14 +352,50 @@ const Connections = () => {
                                                         {isFollowing ? (
                                                             <button
                                                                 onClick={() => handleUnfollow(user._id)}
-                                                                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
+                                                                disabled={isProcessing[user._id]}
+                                                                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                             >
                                                                 <UserX className="w-4 h-4" />
+                                                                Unfollow
                                                             </button>
                                                         ) : (
                                                             <button
                                                                 onClick={() => handleFollow(user._id)}
-                                                                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
+                                                                disabled={isProcessing[user._id]}
+                                                                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                <UserPlus className="w-4 h-4" />
+                                                                Follow
+                                                            </button>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        {isFollowing ? (
+                                                            <button
+                                                                onClick={() => handleUnfollow(user._id)}
+                                                                disabled={isProcessing[user._id]}
+                                                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                <UserX className="w-4 h-4" />
+                                                                Unfollow
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => handleFollow(user._id)}
+                                                                disabled={isProcessing[user._id]}
+                                                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                <UserPlus className="w-4 h-4" />
+                                                                Follow
+                                                            </button>
+                                                        )}
+                                                        {!isConnected && (
+                                                            <button
+                                                                onClick={() => handleSendRequest(user._id)}
+                                                                disabled={isProcessing[user._id]}
+                                                                className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                title="Send Connection Request"
                                                             >
                                                                 <UserPlus className="w-4 h-4" />
                                                             </button>

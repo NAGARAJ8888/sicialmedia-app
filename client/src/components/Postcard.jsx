@@ -1,8 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Heart, MessageCircle, Share2, MoreVertical, Bookmark } from "lucide-react";
 import moment from "moment";
+import { useAuth } from "@clerk/clerk-react";
+import { useSelector, useDispatch } from "react-redux";
+import api from "../api/axios";
+import toast from "react-hot-toast";
+import { updatePost } from "../features/posts/postsSlice";
 
 const Postcard = ({ post }) => {
+  const { getToken } = useAuth();
+  const dispatch = useDispatch();
+  const currentUser = useSelector((state) => state.user.value);
+
   if (!post) return null;
 
   const user = post?.user || {};
@@ -11,18 +20,66 @@ const Postcard = ({ post }) => {
   const avatar = user?.profile_picture;
   const isVerified = user?.is_verified || false;
   const content = post?.content || "";
-  const imageUrls = post?.image_urls || [];
+  const images = post?.images || [];
   const postType = post?.post_type || "text";
   const likesCount = Array.isArray(post?.likes_count) ? post.likes_count.length : 0;
   const createdAt = post?.createdAt;
   const timeAgo = createdAt ? moment(createdAt).fromNow() : "";
 
-  const [isLiked, setIsLiked] = useState(likesCount > 0);
+  const [isLiked, setIsLiked] = useState(currentUser && post?.likes_count?.includes(currentUser._id));
   const [currentLikes, setCurrentLikes] = useState(likesCount);
+  const [isLiking, setIsLiking] = useState(false);
 
-  const handleLike = () => {
-    setIsLiked(!isLiked);
-    setCurrentLikes((prev) => (isLiked ? prev - 1 : prev + 1));
+  useEffect(() => {
+    setIsLiked(currentUser && post?.likes_count?.includes(currentUser._id));
+    setCurrentLikes(likesCount);
+  }, [post?.likes_count, currentUser]);
+
+  const handleLike = async () => {
+    if (!currentUser) {
+      toast.error("Please login to like posts");
+      return;
+    }
+
+    setIsLiking(true);
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        toast.error("Authentication required");
+        return;
+      }
+
+      const response = await api.post(
+        "/api/post/like",
+        { postId: post._id },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        // Update local state
+        setIsLiked(!isLiked);
+        setCurrentLikes((prev) => (isLiked ? prev - 1 : prev + 1));
+
+        // Update Redux state
+        const updatedPost = {
+          ...post,
+          likes_count: isLiked
+            ? post.likes_count.filter((id) => id !== currentUser._id)
+            : [...post.likes_count, currentUser._id],
+        };
+        dispatch(updatePost(updatedPost));
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update like");
+      console.error("Error liking post:", error);
+    } finally {
+      setIsLiking(false);
+    }
   };
 
   // Extract hashtags from content
@@ -105,12 +162,12 @@ const Postcard = ({ post }) => {
       )}
 
       {/* Images */}
-      {imageUrls.length > 0 && (
+      {images.length > 0 && (
         <div className="w-full">
-          {imageUrls.length === 1 ? (
+          {images.length === 1 ? (
             <div className="w-full bg-gray-100">
               <img
-                src={imageUrls[0]}
+                src={images[0]}
                 alt="Post content"
                 className="w-full h-auto object-cover"
                 loading="lazy"
@@ -121,11 +178,11 @@ const Postcard = ({ post }) => {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-0.5 bg-gray-100 p-0.5">
-              {imageUrls.slice(0, 4).map((url, idx) => (
+              {images.slice(0, 4).map((url, idx) => (
                 <div
                   key={idx}
                   className={`${
-                    imageUrls.length === 3 && idx === 2 ? "col-span-2" : ""
+                    images.length === 3 && idx === 2 ? "col-span-2" : ""
                   } bg-gray-200 aspect-square overflow-hidden`}
                 >
                   <img
@@ -152,7 +209,8 @@ const Postcard = ({ post }) => {
             <button
               type="button"
               onClick={handleLike}
-              className={`flex items-center gap-2 transition-colors ${
+              disabled={isLiking}
+              className={`flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                 isLiked ? "text-red-500" : "text-gray-600 hover:text-red-500"
               }`}
               aria-label="Like"

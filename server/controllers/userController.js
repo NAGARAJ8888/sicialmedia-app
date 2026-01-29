@@ -164,6 +164,7 @@ export const discoverUsers = async (req, res) => {
         const {userId} = await req.auth();
         const {input} = req.body;
 
+        // Search for users
         const allUsers = await User.find({
             $or: [
                 { username: new RegExp(input, 'i') },
@@ -171,10 +172,44 @@ export const discoverUsers = async (req, res) => {
                 { email: new RegExp(input, 'i') },
                 { location: new RegExp(input, 'i') },
             ]
-        })
+        });
 
         const filteredUsers = allUsers.filter(user => user._id !== userId);
-        res.status(200).json({ success: true, users: filteredUsers });
+
+        // Search for posts
+        const posts = await Post.find({
+            $or: [
+                { content: new RegExp(input, 'i') },
+                { tags: new RegExp(input, 'i') }
+            ]
+        }).populate('user').limit(20);
+
+        // Extract hashtags from posts
+        const hashtagMap = new Map();
+        posts.forEach(post => {
+            const content = post.content || '';
+            const matches = content.match(/#\w+/g);
+            if (matches) {
+                matches.forEach(tag => {
+                    const tagLower = tag.toLowerCase();
+                    if (tagLower.substring(1).includes(input.toLowerCase())) {
+                        hashtagMap.set(tagLower, (hashtagMap.get(tagLower) || 0) + 1);
+                    }
+                });
+            }
+        });
+
+        const hashtags = Array.from(hashtagMap.entries())
+            .map(([tag, count]) => ({ tag, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10);
+
+        res.status(200).json({ 
+            success: true, 
+            users: filteredUsers,
+            posts: posts,
+            hashtags: hashtags
+        });
 
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -252,42 +287,49 @@ export const unfollowUser = async (req, res) => {
 //send connection request
 export const sendConnectionRequest = async (req, res) => {
     try {
-        const {userId} = req.auth()
-        const {id} = req.body;
+        const { userId } = await req.auth();
+        const { id } = req.body;
 
-        const last24Hours = new Date(Date.now - 24 * 60 * 60 * 1000)
-        const connectionRequests = await Connection.find({from_user_id: userId,
-            created_at: {$gt: last24Hours}
-         })
-         if(connectionRequests.length >= 20){
-            return res.json({success: false, message: 'You have sent more than 20 connection requests in the last 24 hours'})
-         }
+        if (!id) {
+            return res.status(400).json({ success: false, message: 'Missing target user id' });
+        }
 
-         //check if users are already connected
-         const connection = await Connection.findOne({
+        const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const connectionRequests = await Connection.find({
+            from_user_id: userId,
+            createdAt: { $gt: last24Hours }
+        });
+
+        if (connectionRequests.length >= 20) {
+            return res.json({ success: false, message: 'You have sent more than 20 connection requests in the last 24 hours' });
+        }
+
+        // check if users are already connected or a request exists
+        const connection = await Connection.findOne({
             $or: [
-                {rom_user_id: userId, to_user_id: id},
-                {rom_user_id: id, to_user_id: userId},
+                { from_user_id: userId, to_user_id: id },
+                { from_user_id: id, to_user_id: userId },
             ]
-         })
+        });
 
-         if(!connection){
+        if (!connection) {
             const newConnection = await Connection.create({
                 from_user_id: userId,
                 to_user_id: id
-            })
+            });
 
             await inngest.send({
                 name: 'app/connection-request',
                 data: {
                     connectionId: newConnection._id
                 }
-            })
-            return res.json({success: true, message: 'Connection request sent successfully'})
-         }else if(connection && connection.status === 'accepted'){
-                return res.json({success: false, message: 'You are already connected with the user'})
-         }
-         return res.json({success: false, message: 'Connection request pending'})
+            });
+            return res.json({ success: true, message: 'Connection request sent successfully' });
+        } else if (connection && connection.status === 'accepted') {
+            return res.json({ success: false, message: 'You are already connected with the user' });
+        }
+
+        return res.json({ success: false, message: 'Connection request pending' });
 
     } catch (error) {
         console.log(error)
@@ -322,37 +364,41 @@ export const getUserConnections = async (req, res) => {
 //accept connection requests
 export const acceptConnectionRequest = async (req, res) => {
     try {
-        const { userId } = req.auth();
+        const { userId } = await req.auth();
         const { Id } = req.body;
 
         if (!Id) {
-            return res.status(400).json({ success: false, message: "Missing Id in request body." });
+            return res.status(400).json({ success: false, message: 'Missing Id in request body.' });
         }
 
-        // Find the connection where the current user is the recipient and the request is pending
         const connection = await Connection.findOne({
-            from_user_id: id,
+            from_user_id: Id,
             to_user_id: userId,
+            status: 'pending'
         });
 
         if (!connection) {
-            return res.status(404).json({ success: false, message: "Connection request not found." });
+            return res.status(404).json({ success: false, message: 'Connection request not found.' });
         }
 
-        const user = await User.findById(userId);
-        user.connections.push(id);
-        await connection.save();
-
-        const toUser = await User.findById(id);
-        toUser.connections.push(userId);
-        await toUser.save();
-
+        // mark connection accepted
         connection.status = 'accepted';
         await connection.save();
 
-        // Optionally, add references in User model for connections if not already handled elsewhere.
+        // add each user to other's connections array if not present
+        const user = await User.findById(userId);
+        if (!user.connections.includes(Id)) {
+            user.connections.push(Id);
+            await user.save();
+        }
 
-        res.json({ success: true, message: "Connection accepted successfully." });
+        const toUser = await User.findById(Id);
+        if (!toUser.connections.includes(userId)) {
+            toUser.connections.push(userId);
+            await toUser.save();
+        }
+
+        res.json({ success: true, userId: Id, message: 'Connection accepted successfully.' });
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, message: error.message });

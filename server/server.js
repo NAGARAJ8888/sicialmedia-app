@@ -15,10 +15,26 @@ await connectDB();
 
 // CORS should be before other middleware
 app.use(cors());
-// Only parse JSON for non-file-upload routes
-// For file uploads, multer handles the parsing
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+// Only parse JSON/urlencoded for non-multipart requests
+// This middleware will skip requests with Content-Type: multipart/form-data
+app.use((req, res, next) => {
+  const contentType = req.get('content-type') || '';
+  if (contentType.includes('multipart/form-data')) {
+    // Skip body parsing for multipart requests (file uploads)
+    return next();
+  }
+  express.json()(req, res, next);
+});
+
+app.use((req, res, next) => {
+  const contentType = req.get('content-type') || '';
+  if (contentType.includes('multipart/form-data')) {
+    return next();
+  }
+  express.urlencoded({ extended: true })(req, res, next);
+});
+
 app.use(clerkMiddleware());
 
 app.use("/api/inngest", serve({ client: inngest, functions }));

@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { X, Image as ImageIcon, Type as TypeIcon, Upload } from "lucide-react";
+import { X, Image as ImageIcon, Type as TypeIcon, Upload, Loader2 } from "lucide-react";
 import moment from "moment";
+import { useAuth } from "@clerk/clerk-react";
+import { useDispatch } from "react-redux";
+import { fetchStories } from "../features/stories/storiesSlice";
+import api from "../api/axios";
+import toast from "react-hot-toast";
 
 const BG_COLORS = [
   "#4f46e5",
@@ -12,10 +17,13 @@ const BG_COLORS = [
 ];
 
 const StoryModel = ({ open, onClose }) => {
+  const { getToken } = useAuth();
+  const dispatch = useDispatch();
   const [mode, setMode] = useState("media"); // 'media' | 'text'
   const [text, setText] = useState("");
   const [bg, setBg] = useState(BG_COLORS[0]);
   const [file, setFile] = useState(null);
+  const [isPosting, setIsPosting] = useState(false);
 
   const previewUrl = useMemo(() => {
     if (!file) return "";
@@ -46,6 +54,58 @@ const StoryModel = ({ open, onClose }) => {
     setFile(null);
   }, [open]);
 
+
+  const handleShare = async () => {
+    if (!text.trim() && !file) {
+      toast.error("Please add content or media to your story");
+      return;
+    }
+
+    setIsPosting(true);
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        toast.error("Authentication required. Please login again.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("content", text.trim() || "");
+      formData.append("media_type", mode === "text" ? "text" : file.type.startsWith("video/") ? "video" : "image");
+      formData.append("background_color", bg);
+
+      if (file) {
+        formData.append("media", file);
+      }
+
+      const response = await api.post("/api/story/create", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      toast.success("Story posted successfully!");
+
+      // Refetch stories to ensure consistency
+      if (token) {
+        dispatch(fetchStories(token));
+      }
+
+      // Reset and close
+      setMode("media");
+      setText("");
+      setBg(BG_COLORS[0]);
+      setFile(null);
+      onClose?.();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to post story. Please try again.");
+      console.error("Error creating story:", error);
+    } finally {
+      setIsPosting(false);
+    }
+  };
   if (!open) return null;
 
   const nowLabel = moment().fromNow();
@@ -174,17 +234,26 @@ const StoryModel = ({ open, onClose }) => {
               <div className="mt-6 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium"
+                  disabled={isPosting}
+                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={() => onClose?.()}
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold"
-                  onClick={() => onClose?.()}
+                  disabled={isPosting || (!text.trim() && !file)}
+                  className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  onClick={handleShare}
                 >
-                  Share
+                  {isPosting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Posting...
+                    </>
+                  ) : (
+                    "Share"
+                  )}
                 </button>
               </div>
             </div>

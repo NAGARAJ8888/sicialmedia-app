@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { dummyUserData, dummyPostsData, dummyConnectionsData } from '../assets/assets'
 import { MessageCircle, UserPlus, UserCheck, Settings, Grid3x3, User, MapPin, Calendar, Edit } from 'lucide-react'
 import Postcard from '../components/Postcard'
 import Loading from '../components/Loading'
 import ProfileModal from '../components/ProfileModal'
 import moment from 'moment'
+import { useSelector } from 'react-redux'
 
 const Profile = () => {
     const { profileId } = useParams()
@@ -21,31 +21,40 @@ const Profile = () => {
     const [showProfileModal, setShowProfileModal] = useState(false)
     const dropdownRef = useRef(null)
 
+    const currentUser = useSelector((state) => state.user.value)
+    const posts = useSelector((state) => state.posts.posts || [])
+    const connections = useSelector((state) => state.connections.connections || [])
+
     useEffect(() => {
         const fetchProfileData = async () => {
-            // Simulate API call - in real app, fetch by profileId
-            const targetUserId = profileId || dummyUserData._id
-            const user = targetUserId === dummyUserData._id 
-                ? dummyUserData 
-                : dummyConnectionsData.find(u => u._id === targetUserId) || dummyUserData
+            if (!currentUser) {
+                setLoading(true)
+                return
+            }
+
+            // Find the target user
+            const targetUserId = profileId || currentUser._id
+            const user = targetUserId === currentUser._id 
+                ? currentUser 
+                : connections.find(u => u._id === targetUserId) || currentUser
             
             setProfileUser(user)
             
             // Filter posts by user
-            const posts = dummyPostsData.filter(post => post.user._id === user._id)
-            setUserPosts(posts)
+            const filteredPosts = posts.filter(post => post.user?._id === user._id)
+            setUserPosts(filteredPosts)
             
             // Set followers/following counts
             setFollowersCount(user.followers?.length || 0)
             setFollowingCount(user.following?.length || 0)
             
             // Check if current user is following this profile
-            setIsFollowing(dummyUserData.following?.includes(user._id) || false)
+            setIsFollowing(currentUser.following?.includes(user._id) || false)
             
             setLoading(false)
         }
         fetchProfileData()
-    }, [profileId])
+    }, [profileId, currentUser, posts, connections])
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -64,7 +73,7 @@ const Profile = () => {
         }
     }, [showDropdown])
 
-    const isCurrentUser = !profileId || profileId === dummyUserData._id
+    const isCurrentUser = !profileId || (currentUser && profileId === currentUser._id)
 
     const handleFollow = () => {
         setIsFollowing(!isFollowing)

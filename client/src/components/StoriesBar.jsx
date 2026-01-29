@@ -1,19 +1,35 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { dummyStoriesData } from "../assets/assets";
+import React, { useMemo, useState, useEffect } from "react";
 import { Plus } from "lucide-react";
 import moment from "moment";
 import StoryModel from "./StoryModel";
 import StoryViewer from "./StoryViewer";
+import { useSelector, useDispatch } from "react-redux";
+import { useAuth } from "@clerk/clerk-react";
+import { fetchStories } from "../features/stories/storiesSlice";
 
 const StoriesBar = () => {
-  const [stories, setStories] = useState([]);
+  const dispatch = useDispatch();
+  const { getToken } = useAuth();
   const [storyModelOpen, setStoryModelOpen] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
 
+  const stories = useSelector((state) => state.stories.stories || []);
+
   useEffect(() => {
-    setStories(dummyStoriesData);
-  }, []);
+    const getStories = async () => {
+      try {
+        const token = await getToken();
+        if (token) {
+          dispatch(fetchStories(token));
+        }
+      } catch (error) {
+        console.error('Error fetching stories:', error);
+      }
+    };
+
+    getStories();
+  }, [dispatch, getToken]);
 
   const items = useMemo(() => (Array.isArray(stories) ? stories : []), [stories]);
 
@@ -78,15 +94,29 @@ const StoriesBar = () => {
                     )}
 
                     {(isImage || isVideo) && (
-                      <img
-                        src={story?.media_url}
-                        alt={`${name} story`}
-                        className="absolute inset-0 w-full h-full object-cover"
-                        loading="lazy"
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                        }}
-                      />
+                      <div className="absolute inset-0 w-full h-full bg-gray-100">
+                        {isVideo ? (
+                          <video
+                            src={story?.media_url}
+                            alt={`${name} story`}
+                            className="absolute inset-0 w-full h-full object-cover"
+                            loading="lazy"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <img
+                            src={story?.media_url}
+                            alt={`${name} story`}
+                            className="absolute inset-0 w-full h-full object-cover"
+                            loading="lazy"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                        )}
+                      </div>
                     )}
 
                     {/* avatar chip (top-left) */}

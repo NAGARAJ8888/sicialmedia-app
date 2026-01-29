@@ -1,12 +1,13 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { menuItemsData, assets, dummyUserData } from '../assets/assets'
+import { menuItemsData, assets } from '../assets/assets'
 import { X, Plus, LogOut } from 'lucide-react'
 import { UserButton, useClerk } from '@clerk/clerk-react'
+import { useSelector } from 'react-redux'
 
 const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     const location = useLocation()
-    const user = dummyUserData
+    const user = useSelector((state) => state.user.value)
     const {signOut} = useClerk()
 
 
@@ -40,11 +41,9 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                 {/* Header with Logo and Close Button */}
                 <div className="flex items-center justify-between p-4 border-b border-gray-200">
                     <Link to="/app" className="flex items-center space-x-2">
-                        <img 
-                            src={assets.logo} 
-                            alt="Logo" 
-                            className="w-full"
-                        />
+                        <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                            Vibely
+                        </h1>
                     </Link>
                     <button
                         onClick={() => setSidebarOpen(false)}
@@ -61,6 +60,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                             const Icon = item.Icon
                             const path = item.to === '/' ? '/app' : `/app${item.to}`
                             const active = isActive(path)
+                            const isCreatePost = item.label === 'Create Post'
                             
                             return (
                                 <li key={item.to}>
@@ -70,13 +70,15 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                                         className={`
                                             flex items-center space-x-3 px-4 py-3 rounded-lg
                                             transition-colors duration-200
-                                            ${active 
+                                            ${isCreatePost
+                                                ? 'bg-purple-600 hover:bg-purple-700 text-white font-medium mt-5'
+                                                : active 
                                                 ? 'bg-purple-50 text-purple-600 font-medium' 
                                                 : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                                             }
                                         `}
                                     >
-                                        <Icon className={`h-5 w-5 ${active ? 'text-purple-600' : 'text-gray-500'}`} />
+                                        <Icon className={`h-5 w-5 ${isCreatePost ? 'text-white' : active ? 'text-purple-600' : 'text-gray-500'}`} />
                                         <span>{item.label}</span>
                                     </Link>
                                 </li>
@@ -96,10 +98,10 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                             <UserButton/>
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">
-                                    {user.full_name}
+                                    {user?.full_name || user?.username || 'User'}
                                 </p>
                                 <p className="text-xs text-gray-500 truncate">
-                                    @{user.username}
+                                    @{user?.username || 'user'}
                                 </p>
                             </div>
                         </Link>

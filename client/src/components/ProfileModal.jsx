@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState } from 'react'
 import { X, MessageCircle, UserPlus, UserCheck, MapPin, Calendar, Edit, Camera, Save, Loader2 } from 'lucide-react'
 import moment from 'moment'
 import toast from 'react-hot-toast'
+import { useSelector, useDispatch } from 'react-redux'
+import { useAuth } from '@clerk/clerk-react'
+import api from '../api/axios'
+import { fetchUserData } from '../features/user/userSlice'
 
 /**
  * ProfileModal
@@ -26,6 +30,11 @@ const ProfileModal = ({
   onMessage,
   onSave,
 }) => {
+  const currentUser = useSelector((state) => state?.user?.value)
+  const dispatch = useDispatch()
+  const { getToken } = useAuth()
+  const profileUser = user ?? currentUser
+
   const panelRef = useRef(null)
   const coverInputRef = useRef(null)
   const profileInputRef = useRef(null)
@@ -62,28 +71,28 @@ const ProfileModal = ({
 
   // Initialize form data when modal opens or user changes
   useEffect(() => {
-    if (isOpen && user) {
+    if (isOpen && profileUser) {
       setFormData({
-        full_name: user?.full_name || '',
-        username: user?.username || '',
-        bio: user?.bio || '',
-        location: user?.location || '',
+        full_name: profileUser?.full_name || '',
+        username: profileUser?.username || '',
+        bio: profileUser?.bio || '',
+        location: profileUser?.location || '',
         profile_picture: null,
         cover_photo: null,
       })
-      setProfilePreview(user?.profile_picture || null)
-      setCoverPreview(user?.cover_photo || null)
+      setProfilePreview(profileUser?.profile_picture || null)
+      setCoverPreview(profileUser?.cover_photo || null)
       setIsEditing(false)
     }
-  }, [isOpen, user])
+  }, [isOpen, profileUser])
 
-  if (!isOpen || !user) return null
+  if (!isOpen || !profileUser) return null
 
-  const name = user?.full_name || user?.username || 'User'
-  const username = user?.username || 'user'
-  const avatar = isEditing && profilePreview ? profilePreview : (user?.profile_picture || null)
-  const cover = isEditing && coverPreview ? coverPreview : (user?.cover_photo || null)
-  const joinedText = user?.createdAt ? `Joined ${moment(user.createdAt).format('MMMM YYYY')}` : null
+  const name = profileUser?.full_name || profileUser?.username || 'User'
+  const username = profileUser?.username || 'user'
+  const avatar = isEditing && profilePreview ? profilePreview : (profileUser?.profile_picture || null)
+  const cover = isEditing && coverPreview ? coverPreview : (profileUser?.cover_photo || null)
+  const joinedText = profileUser?.createdAt ? `Joined ${moment(profileUser.createdAt).format('MMMM YYYY')}` : null
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -124,43 +133,62 @@ const ProfileModal = ({
 
   const handleCancel = () => {
     setFormData({
-      full_name: user?.full_name || '',
-      username: user?.username || '',
-      bio: user?.bio || '',
-      location: user?.location || '',
+      full_name: profileUser?.full_name || '',
+      username: profileUser?.username || '',
+      bio: profileUser?.bio || '',
+      location: profileUser?.location || '',
       profile_picture: null,
       cover_photo: null,
     })
-    setProfilePreview(user?.profile_picture || null)
-    setCoverPreview(user?.cover_photo || null)
+    setProfilePreview(profileUser?.profile_picture || null)
+    setCoverPreview(profileUser?.cover_photo || null)
     setIsEditing(false)
   }
 
   const handleSave = async () => {
     setIsSaving(true)
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      const updatedUser = {
-        ...user,
-        full_name: formData.full_name,
-        username: formData.username,
-        bio: formData.bio,
-        location: formData.location,
-        profile_picture: profilePreview || user?.profile_picture,
-        cover_photo: coverPreview || user?.cover_photo,
+      const token = await getToken()
+      if (!token) {
+        toast.error('Authentication required. Please login again.')
+        return
       }
 
+      const formDataToSend = new FormData()
+      formDataToSend.append('full_name', formData.full_name)
+      formDataToSend.append('username', formData.username)
+      formDataToSend.append('bio', formData.bio)
+      formDataToSend.append('location', formData.location)
+
+      if (formData.profile_picture) {
+        formDataToSend.append('profile', formData.profile_picture)
+      }
+
+      if (formData.cover_photo) {
+        formDataToSend.append('cover', formData.cover_photo)
+      }
+
+      const response = await api.post('/api/user/update', formDataToSend, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      
+      // Refetch user data to update Redux state
+      dispatch(fetchUserData(token))
+      
       if (onSave) {
-        onSave(updatedUser)
+        onSave(response.data.user || response.data)
       }
       
       toast.success('Profile updated successfully!')
       setIsEditing(false)
       onClose?.()
     } catch (error) {
-      toast.error('Failed to update profile')
+      toast.error(error.response?.data?.message || 'Failed to update profile')
+      console.error('Error updating profile:', error)
     } finally {
       setIsSaving(false)
     }
@@ -390,7 +418,7 @@ const ProfileModal = ({
                       <h3 className="text-xl font-bold text-gray-900">
                         {name}
                       </h3>
-                      {user?.is_verified && (
+                      {profileUser?.is_verified && (
                         <svg className="w-5 h-5 text-blue-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                           <path
                             fillRule="evenodd"
@@ -403,17 +431,17 @@ const ProfileModal = ({
                     <p className="text-sm text-gray-500">@{username}</p>
                   </div>
 
-                  {user?.bio && (
+                  {profileUser?.bio && (
                     <div>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{user.bio}</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{profileUser.bio}</p>
                     </div>
                   )}
 
                   <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
-                    {user?.location && (
+                    {profileUser?.location && (
                       <div className="flex items-center gap-1.5">
                         <MapPin className="w-4 h-4" />
-                        <span>{user.location}</span>
+                        <span>{profileUser.location}</span>
                       </div>
                     )}
                     {joinedText && (
@@ -430,7 +458,7 @@ const ProfileModal = ({
                   <div className="mt-6 flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => onMessage?.(user?._id)}
+                      onClick={() => onMessage?.(profileUser?._id)}
                       className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
                     >
                       <MessageCircle className="w-4 h-4" />
@@ -439,7 +467,7 @@ const ProfileModal = ({
 
                     <button
                       type="button"
-                      onClick={() => onFollowToggle?.(user?._id)}
+                      onClick={() => onFollowToggle?.(profileUser?._id)}
                       className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 ${
                         isFollowing ? 'bg-gray-100 hover:bg-gray-200 text-gray-700' : 'bg-purple-50 hover:bg-purple-100 text-purple-700'
                       }`}

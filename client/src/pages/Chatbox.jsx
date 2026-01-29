@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { dummyUserData, dummyMessagesData, dummyConnectionsData } from '../assets/assets'
 import { ArrowLeft, Send, Image as ImageIcon, Smile, MoreVertical, Phone, Video, X } from 'lucide-react'
 import moment from 'moment'
 import Loading from '../components/Loading'
 import toast from 'react-hot-toast'
+import { useSelector, useDispatch } from 'react-redux'
+import { sendMessage, addMessageRealtime, fetchChatMessages, markMessagesAsSeen } from '../features/messages/messagesSlice'
 
 const Chatbox = () => {
     const { userId } = useParams()
@@ -14,7 +15,6 @@ const Chatbox = () => {
     const textareaRef = useRef(null)
     const emojiPickerRef = useRef(null)
     
-    const [loading, setLoading] = useState(true)
     const [messages, setMessages] = useState([])
     const [otherUser, setOtherUser] = useState(null)
     const [messageText, setMessageText] = useState('')
@@ -22,27 +22,36 @@ const Chatbox = () => {
     const [imagePreview, setImagePreview] = useState(null)
     const [selectedImage, setSelectedImage] = useState(null)
 
+    const allMessages = useSelector((state) => state.messages.messages || [])
+    const connections = useSelector((state) => state.connections.connections || [])
+    const currentUser = useSelector((state) => state.user.value)
+    const loading = useSelector((state) => state.messages.loading)
+    const dispatch = useDispatch()
+
     useEffect(() => {
-        const fetchChatData = async () => {
-            // Find the other user
-            const user = dummyConnectionsData.find(u => u._id === userId) || dummyUserData
-            setOtherUser(user)
-            
-            // Filter messages for this conversation
-            const currentUserId = dummyUserData._id
-            const conversationMessages = dummyMessagesData.filter(msg => 
-                (msg.from_user_id === currentUserId && msg.to_user_id === userId) ||
-                (msg.from_user_id === userId && msg.to_user_id === currentUserId)
-            ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-            
-            setMessages(conversationMessages)
-            setLoading(false)
-        }
+        if (!userId || !currentUser) return
+
+        // Find the other user
+        const user = connections.find(u => u._id === userId) || currentUser
+        setOtherUser(user)
         
-        if (userId) {
-            fetchChatData()
-        }
-    }, [userId])
+        // Filter messages for this conversation
+        const currentUserId = currentUser._id
+        const conversationMessages = allMessages.filter(msg => 
+            (msg.from_user_id === currentUserId && msg.to_user_id === userId) ||
+            (msg.from_user_id === userId && msg.to_user_id === currentUserId)
+        ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+        
+        setMessages(conversationMessages)
+    }, [userId, currentUser, connections, allMessages])
+
+    // Fetch messages from server when opening a conversation and mark as seen
+    useEffect(() => {
+        if (!userId || !currentUser) return
+        dispatch(fetchChatMessages({ to_user_id: userId }))
+        // Mark messages from the other user as seen
+        dispatch(markMessagesAsSeen({ from_user_id: userId }))
+    }, [userId, currentUser, dispatch])
 
     // Scroll to bottom when messages change
     useEffect(() => {
@@ -53,6 +62,57 @@ const Chatbox = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
 
+    // SSE: listen for incoming messages for this logged-in user
+    useEffect(() => {
+        if (!currentUser?._id) return
+
+        const src = new EventSource(`/api/message/sse/${currentUser._id}`)
+
+        const onNewMessage = (e) => {
+            try {
+                const msg = JSON.parse(e.data)
+                // Add to global redux store
+                dispatch(addMessageRealtime(msg))
+
+                // If the incoming message belongs to the open conversation, append locally
+                const currentUserId = currentUser._id
+                if (
+                    (msg.from_user_id === userId && msg.to_user_id === currentUserId) ||
+                    (msg.from_user_id === currentUserId && msg.to_user_id === userId)
+                ) {
+                    setMessages(prev => [...prev, msg])
+                }
+            } catch (err) {
+                // ignore parse errors
+            }
+        }
+
+        src.addEventListener('new_message', onNewMessage)
+
+        src.onmessage = (e) => {
+            try {
+                const msg = JSON.parse(e.data)
+                dispatch(addMessageRealtime(msg))
+                const currentUserId = currentUser._id
+                if (
+                    (msg.from_user_id === userId && msg.to_user_id === currentUserId) ||
+                    (msg.from_user_id === currentUserId && msg.to_user_id === userId)
+                ) {
+                    setMessages(prev => [...prev, msg])
+                }
+            } catch (err) {}
+        }
+
+        src.onerror = () => {
+            // Could add reconnect logic here if needed
+        }
+
+        return () => {
+            src.removeEventListener('new_message', onNewMessage)
+            src.close()
+        }
+    }, [currentUser, userId, dispatch])
+
     // Common emojis for quick access
     const quickEmojis = ['😀', '😂', '😍', '😊', '👍', '❤️', '🎉', '🔥', '💯', '✨', '🙌', '👏']
 
@@ -61,24 +121,23 @@ const Chatbox = () => {
             return
         }
 
-        const newMessage = {
-            _id: `msg_${Date.now()}`,
-            from_user_id: dummyUserData._id,
-            to_user_id: userId,
-            text: messageText.trim(),
-            message_type: selectedImage ? 'image' : 'text',
-            media_url: selectedImage ? URL.createObjectURL(selectedImage) : '',
-            createdAt: new Date().toISOString(),
-            seen: false
-        }
-
-        setMessages(prev => [...prev, newMessage])
         setMessageText('')
         setSelectedImage(null)
         setImagePreview(null)
         setShowEmojiPicker(false)
 
-        // Simulate sending
+        // Send to server (multipart form to support images)
+        try {
+            const formData = new FormData()
+            formData.append('to_user_id', userId)
+            formData.append('text', messageText.trim())
+            if (selectedImage) formData.append('image', selectedImage)
+
+            dispatch(sendMessage(formData))
+        } catch (err) {
+            console.error('Send message error', err)
+        }
+
         toast.success('Message sent')
     }
 
@@ -211,7 +270,7 @@ const Chatbox = () => {
                 <div className="max-w-3xl mx-auto space-y-4">
                     {messages.length > 0 ? (
                         messages.map((message, index) => {
-                            const isCurrentUser = message.from_user_id === dummyUserData._id
+                            const isCurrentUser = message.from_user_id === currentUser?._id
                             const previousMessage = index > 0 ? messages[index - 1] : null
                             const showDateSeparator = shouldShowDateSeparator(message, previousMessage)
 

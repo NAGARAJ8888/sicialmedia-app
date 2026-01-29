@@ -96,6 +96,18 @@ export const sendMessage = async (req, res) => {
         is_read: false,
       });
   
+      // Send SSE event to recipient if they have an open SSE connection
+      try {
+        const payload = JSON.stringify(message);
+        if (connections[to_user_id]) {
+          connections[to_user_id].write(`event: new_message\n`);
+          connections[to_user_id].write(`data: ${payload}\n\n`);
+        }
+
+      } catch (e) {
+        console.error('Failed to push SSE message:', e);
+      }
+
       res.status(201).json({
         message: "Message sent successfully",
         data: message,
@@ -150,6 +162,105 @@ export const getChatMessages = async (req, res) => {
 
 // Get recent messages (conversation list)
 export const getUserRecentMessages = async (req, res) => {
+  try {
+    const auth = req.auth?.();
+    const userId = auth?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const conversations = await Message.aggregate([
+      {
+        $match: {
+          $or: [
+            { from_user_id: userId },
+            { to_user_id: userId },
+          ],
+        },
+      },
+
+      // Identify the chat partner
+      {
+        $addFields: {
+          chat_user_id: {
+            $cond: [
+              { $eq: ["$from_user_id", userId] },
+              "$to_user_id",
+              "$from_user_id",
+            ],
+          },
+        },
+      },
+
+      { $sort: { createdAt: -1 } },
+
+      {
+        $group: {
+          _id: "$chat_user_id",
+
+          last_message: { $first: "$$ROOT" },
+
+          // 🔥 Count unseen messages sent TO current user
+          unseenCount: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ["$to_user_id", userId] },
+                    { $eq: ["$seen", false] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+
+      // Fetch user details
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      { $unwind: "$user" },
+
+      {
+        $project: {
+          _id: 1,
+          last_message: 1,
+          unseenCount: 1,
+          user: {
+            _id: 1,
+            username: 1,
+            full_name: 1,
+            profile_picture: 1,
+          },
+        },
+      },
+
+      { $sort: { "last_message.createdAt": -1 } },
+    ]);
+
+    res.status(200).json({
+      message: "Recent conversations fetched successfully",
+      conversations,
+    });
+  } catch (error) {
+    console.error("Error getting recent messages:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+
+// Mark messages as seen
+export const markMessagesAsSeen = async (req, res) => {
     try {
       // Auth safety
       const auth = req.auth?.();
@@ -159,46 +270,34 @@ export const getUserRecentMessages = async (req, res) => {
         return res.status(401).json({ message: "Unauthorized" });
       }
   
-      // Aggregate to get last message per conversation
-      const conversations = await Message.aggregate([
+      // Parse body if multipart or stringified JSON
+      if (typeof req.body === "string") {
+        req.body = JSON.parse(req.body);
+      }
+  
+      const { from_user_id } = req.body;
+  
+      if (!from_user_id) {
+        return res.status(400).json({ message: "Sender user id is required" });
+      }
+  
+      // Mark all messages from the sender to the current user as seen
+      const result = await Message.updateMany(
         {
-          $match: {
-            $or: [
-              { from_user_id: userId },
-              { to_user_id: userId },
-            ],
-          },
+          from_user_id,
+          to_user_id: userId,
+          seen: false,
         },
-        {
-          $addFields: {
-            chat_user: {
-              $cond: [
-                { $eq: ["$from_user_id", userId] },
-                "$to_user_id",
-                "$from_user_id",
-              ],
-            },
-          },
-        },
-        { $sort: { createdAt: -1 } },
-        {
-          $group: {
-            _id: "$chat_user",
-            last_message: { $first: "$$ROOT" },
-          },
-        },
-        { $sort: { "last_message.createdAt": -1 } },
-      ]);
+        { $set: { seen: true } }
+      );
   
       res.status(200).json({
-        message: "Recent conversations fetched successfully",
-        conversations,
+        message: "Messages marked as seen",
+        modifiedCount: result.modifiedCount,
       });
   
     } catch (error) {
-      console.error("Error getting recent messages:", error);
+      console.error("Error marking messages as seen:", error);
       res.status(500).json({ message: error.message });
     }
 };
-  
-  

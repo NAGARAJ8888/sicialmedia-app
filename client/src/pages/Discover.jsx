@@ -1,78 +1,78 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { dummyPostsData, dummyConnectionsData, dummyUserData } from '../assets/assets'
 import { Search, TrendingUp, Hash, UserPlus, Users, Sparkles } from 'lucide-react'
 import Postcard from '../components/Postcard'
 import Loading from '../components/Loading'
+import { useSelector, useDispatch } from 'react-redux'
+import { useAuth } from '@clerk/clerk-react'
+import toast from 'react-hot-toast'
+import api from '../api/axios'
+import { discoverSearch } from '../features/user/userSlice'
 
 const Discover = () => {
-    const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [activeFilter, setActiveFilter] = useState('all') // all, posts, people, hashtags
-    const [posts, setPosts] = useState([])
-    const [suggestedUsers, setSuggestedUsers] = useState([])
-    const [trendingHashtags, setTrendingHashtags] = useState([])
+    const dispatch = useDispatch()
+    const { getToken } = useAuth()
 
-    useEffect(() => {
-        // Simulate API call
-        const fetchDiscoverData = async () => {
-            setPosts(dummyPostsData)
-            setSuggestedUsers(dummyConnectionsData.filter(user => user._id !== dummyUserData._id))
-            
-            // Extract hashtags from posts
-            const hashtags = new Map()
-            dummyPostsData.forEach(post => {
-                const content = post.content || ''
-                const matches = content.match(/#\w+/g)
-                if (matches) {
-                    matches.forEach(tag => {
-                        const tagLower = tag.toLowerCase()
-                        hashtags.set(tagLower, (hashtags.get(tagLower) || 0) + 1)
-                    })
+    const posts = useSelector((state) => state.posts.posts || [])
+    const currentUser = useSelector((state) => state.user.value)
+    const discoverResults = useSelector((state) => state.user.discoverResults)
+    const discoverLoading = useSelector((state) => state.user.discoverLoading)
+    const loading = useSelector((state) => state.posts.loading)
+
+    // Handle search on Enter key press
+    const handleSearch = async (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            if (searchQuery.trim()) {
+                try {
+                    const token = await getToken()
+                    if (token) {
+                        dispatch(discoverSearch({ token, searchQuery }))
+                    }
+                } catch (error) {
+                    console.error('Error during search:', error)
+                    toast.error('Failed to search')
                 }
-            })
-            
-            const sortedHashtags = Array.from(hashtags.entries())
-                .map(([tag, count]) => ({ tag, count }))
-                .sort((a, b) => b.count - a.count)
-                .slice(0, 10)
-            
-            setTrendingHashtags(sortedHashtags)
-            setLoading(false)
+            }
         }
-        fetchDiscoverData()
-    }, [])
-
-    const filteredPosts = posts.filter((post) => {
-        if (!searchQuery) return true
-        const searchLower = searchQuery.toLowerCase()
-        return (
-            post.content?.toLowerCase().includes(searchLower) ||
-            post.user?.full_name?.toLowerCase().includes(searchLower) ||
-            post.user?.username?.toLowerCase().includes(searchLower)
-        )
-    })
-
-    const filteredUsers = suggestedUsers.filter((user) => {
-        if (!searchQuery) return true
-        const searchLower = searchQuery.toLowerCase()
-        return (
-            user.full_name?.toLowerCase().includes(searchLower) ||
-            user.username?.toLowerCase().includes(searchLower) ||
-            user.bio?.toLowerCase().includes(searchLower)
-        )
-    })
-
-    const filteredHashtags = trendingHashtags.filter((item) => {
-        if (!searchQuery) return true
-        return item.tag.toLowerCase().includes(searchQuery.toLowerCase())
-    })
-
-    const handleFollow = (userId) => {
-        console.log('Follow user:', userId)
     }
 
-    if (loading) {
+    const suggestedUsers = searchQuery.trim() 
+        ? discoverResults.users 
+        : []
+
+    const trendingHashtags = searchQuery.trim() 
+        ? discoverResults.hashtags 
+        : []
+
+    const filteredPosts = searchQuery.trim() 
+        ? discoverResults.posts 
+        : posts
+
+    const filteredUsers = suggestedUsers
+    const filteredHashtags = trendingHashtags
+
+    const handleFollow = async (userId) => {
+        try {
+            const token = await getToken()
+            if (token) {
+                const response = await api.post('/api/user/follow', 
+                    { followId: userId },
+                    { headers: { Authorization: `Bearer ${token}` } }
+                )
+                if (response.data.success) {
+                    toast.success('Following user')
+                }
+            }
+        } catch (error) {
+            toast.error('Failed to follow user')
+            console.error('Error following user:', error)
+        }
+    }
+
+    if (loading || discoverLoading) {
         return <Loading />
     }
 
@@ -89,9 +89,10 @@ const Discover = () => {
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <input
                         type="text"
-                        placeholder="Search posts, people, hashtags..."
+                        placeholder="Search posts, people, hashtags... (Press Enter)"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={handleSearch}
                         className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm text-gray-900 placeholder-gray-500"
                     />
                 </div>

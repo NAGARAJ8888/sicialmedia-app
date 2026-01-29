@@ -180,30 +180,16 @@ const StoryViewer = ({ open, stories = [], initialIndex = 0, onClose }) => {
         </div>
 
         {/* progress bar */}
-        {total > 1 && (
-          <div className="flex gap-1 w-full pointer-events-auto">
-            {safeStories.map((_, i) => {
-              const filled =
-                i < clampedIndex ? 1 : i === clampedIndex ? progress : 0;
-
-              return (
-                <div
-                  key={i}
-                  className="flex-1 h-1 rounded-full bg-white/20 overflow-hidden"
-                >
-                  <div
-                    className="h-full bg-white transition-[width] duration-100 linear"
-                    style={{ width: `${filled * 100}%` }}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <div className="h-1 w-full bg-white/20 rounded-full overflow-hidden pointer-events-auto">
+          <div
+            className="h-full bg-white transition-[width] duration-100 linear"
+            style={{ width: `${progress * 100}%` }}
+          />
+        </div>
 
         {/* content */}
-        <div className="flex-1 flex items-center justify-center md:items-center md:justify-center pointer-events-auto relative">
-          <div className="relative w-full h-full md:w-[360px] md:h-auto md:aspect-9/16 rounded-none md:rounded-2xl overflow-hidden bg-black">
+        <div className="flex-1 flex items-center justify-center pointer-events-auto relative w-full">
+          <div className="relative w-full h-full bg-black">
             {isText && (
               <div
                 className="absolute inset-0 flex items-center justify-center p-6"

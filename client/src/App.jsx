@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom'
+import { Route, Routes, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import Feed from './pages/Feed'
 import Messages from './pages/Messages'
@@ -11,22 +11,46 @@ import Layout from './pages/Layout'
 import { useUser, useAuth } from '@clerk/clerk-react'
 import {Toaster} from 'react-hot-toast'
 import { useEffect } from 'react'
+import { useDispatch } from 'react-redux'
+import { fetchUserData } from './features/user/userSlice'
+import { fetchFeedPosts } from './features/posts/postsSlice'
+import { fetchUserConnections } from './features/connections/connectionsSlice'
 
 function App() {
   const { user } = useUser()
   const { getToken } = useAuth()
 
+  const dispatch = useDispatch()
+
   useEffect(()=>{
-    if(user){
-      getToken().then((token)=>console.log(token));
+    const fetchData = async () => {
+      if (!user) return
+      
+      try {
+        const token = await getToken()
+        if (!token) {
+          console.error('No token available')
+          return
+        }
+        
+        console.log('Token for Postman:', token)
+        console.log('Fetching user data with token...')
+        dispatch(fetchUserData(token))
+        dispatch(fetchFeedPosts(token))
+        dispatch(fetchUserConnections(token))
+      } catch (error) {
+        console.error('Error in fetchData:', error)
+      }
     }
-  },[user])
+
+    fetchData()
+  },[user, getToken, dispatch])
 
   return (
     <>
     <Toaster/>
     <Routes>
-      <Route path='/' element={ !user ? <Login/> : <Layout/>} />
+      <Route path='/' element={ !user ? <Login/> : <Navigate to="/app" replace />} />
       <Route path='/app' element={<Layout/>}>
         <Route index element={<Feed/>} />
         <Route path='messages' element={<Messages />} />

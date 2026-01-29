@@ -1,29 +1,23 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { dummyRecentMessagesData, dummyUserData } from '../assets/assets'
 import { Search, MessageCircle, Image as ImageIcon, Video, FileText, MoreVertical, Send } from 'lucide-react'
 import moment from 'moment'
 import Loading from '../components/Loading'
+import { useSelector } from 'react-redux'
 
 const Messages = () => {
-    const [messages, setMessages] = useState([])
-    const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedMessage, setSelectedMessage] = useState(null)
 
-    useEffect(() => {
-        // Simulate API call
-        const fetchMessages = async () => {
-            setMessages(dummyRecentMessagesData)
-            setLoading(false)
-        }
-        fetchMessages()
-    }, [])
+    const messages = useSelector((state) => state.messages.messages || [])
+    const connections = useSelector((state) => state.connections.connections || [])
+    const currentUser = useSelector((state) => state.user.value)
+    const loading = useSelector((state) => state.messages.loading)
 
     // Group messages by conversation (by user)
     const groupMessagesByUser = (messagesList) => {
         const conversations = {}
-        const currentUserId = dummyUserData._id
+        const currentUserId = currentUser?._id
 
         messagesList.forEach((message) => {
             // Determine the other user in the conversation
@@ -73,14 +67,33 @@ const Messages = () => {
 
     const conversations = groupMessagesByUser(messages)
 
+    // Merge connections with conversations
+    // Add connected users who don't have any messages yet
+    const conversationsMap = new Map(conversations.map(c => [c.user._id, c]))
+    connections.forEach((connection) => {
+        if (!conversationsMap.has(connection._id)) {
+            conversationsMap.set(connection._id, {
+                user: connection,
+                lastMessage: null,
+                unreadCount: 0,
+                messages: []
+            })
+        }
+    })
+    const mergedConversations = Array.from(conversationsMap.values()).sort((a, b) => {
+        const dateA = new Date(a.lastMessage?.createdAt || 0)
+        const dateB = new Date(b.lastMessage?.createdAt || 0)
+        return dateB - dateA
+    })
+
     // Filter conversations based on search
-    const filteredConversations = conversations.filter((conv) => {
+    const filteredConversations = mergedConversations.filter((conv) => {
         if (!searchQuery) return true
         const searchLower = searchQuery.toLowerCase()
         return (
             conv.user.full_name?.toLowerCase().includes(searchLower) ||
             conv.user.username?.toLowerCase().includes(searchLower) ||
-            conv.lastMessage.text?.toLowerCase().includes(searchLower)
+            conv.lastMessage?.text?.toLowerCase().includes(searchLower)
         )
     })
 
@@ -147,9 +160,9 @@ const Messages = () => {
                     <div className="space-y-3">
                         {filteredConversations.map((conversation) => {
                             const { user, lastMessage, unreadCount } = conversation
-                            const isUnread = unreadCount > 0 || !lastMessage.seen
-                            const currentUserId = dummyUserData._id
-                            const isFromCurrentUser = lastMessage.from_user_id._id === currentUserId
+                            const isUnread = lastMessage && (unreadCount > 0 || !lastMessage.seen)
+                            const currentUserId = currentUser?._id
+                            const isFromCurrentUser = lastMessage?.from_user_id?._id === currentUserId
                             
                             return (
                                 <Link
@@ -208,27 +221,29 @@ const Messages = () => {
                                             <span className={`text-xs shrink-0 ml-2 ${
                                                 isUnread ? "text-gray-900 font-medium" : "text-gray-500"
                                             }`}>
-                                                {formatTime(lastMessage.createdAt)}
+                                                {lastMessage ? formatTime(lastMessage.createdAt) : ''}
                                             </span>
                                         </div>
                                         
                                         <div className="flex items-center gap-2">
-                                            {isFromCurrentUser && (
+                                            {lastMessage && isFromCurrentUser && (
                                                 <Send className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                                             )}
-                                            {getMessageIcon(lastMessage.message_type)}
+                                            {lastMessage && getMessageIcon(lastMessage.message_type)}
                                             <p className={`text-sm truncate flex-1 ${
                                                 isUnread 
                                                     ? "text-gray-900 font-medium" 
                                                     : "text-gray-600"
                                             }`}>
-                                                {lastMessage.message_type !== 'text' 
-                                                    ? lastMessage.message_type === 'image' 
-                                                        ? '📷 Photo' 
-                                                        : lastMessage.message_type === 'video'
-                                                        ? '🎥 Video'
-                                                        : '📎 File'
-                                                    : lastMessage.text || 'Media'
+                                                {!lastMessage
+                                                    ? 'Start a conversation'
+                                                    : lastMessage.message_type !== 'text' 
+                                                        ? lastMessage.message_type === 'image' 
+                                                            ? '📷 Photo' 
+                                                            : lastMessage.message_type === 'video'
+                                                            ? '🎥 Video'
+                                                            : '📎 File'
+                                                        : lastMessage.text || 'Media'
                                                 }
                                             </p>
                                         </div>
