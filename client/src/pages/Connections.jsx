@@ -184,25 +184,28 @@ const Connections = () => {
     return (
         <div className="h-full flex flex-col bg-slate-50">
             {/* Header */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4">
-                <div className="flex items-center justify-between mb-4">
-                    <h1 className="text-2xl font-bold text-gray-900">Connections</h1>
+            <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
+                <div className="flex items-center justify-between mb-3 sm:mb-4">
+                    <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900">
+                    Connections
+                    </h1>
+
                 </div>
                 
                 {/* Search Bar */}
-                <div className="relative mb-4">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <div className="relative mb-3 sm:mb-4">
+                    <Search className="absolute left-2.5 sm:left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
                     <input
                         type="text"
                         placeholder="Search connections..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm text-gray-900 placeholder-gray-500"
+                        className="w-full pl-8 sm:pl-10 pr-3 sm:pr-4 py-2 sm:py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm sm:text-base text-gray-900 placeholder-gray-500"
                     />
                 </div>
 
                 {/* Tabs */}
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                <div className="flex flex-wrap items-center gap-2 overflow-x-auto no-scrollbar">
                     {tabs.map((tab) => {
                         const Icon = tab.icon
                         const isActive = activeTab === tab.id
@@ -235,9 +238,15 @@ const Connections = () => {
             </div>
 
             {/* Connections List */}
-            <div className="flex-1 overflow-y-auto no-scrollbar p-6">
+            <div className="flex-1 overflow-y-auto no-scrollbar p-3 sm:p-4 md:p-6">
                 {filteredData.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="
+                    grid grid-cols-1
+                    sm:grid-cols-2
+                    lg:grid-cols-3
+                    gap-3 sm:gap-4
+                    ">
+
                         {filteredData.map((user) => {
                             const isCurrentUser = currentUser && user._id === currentUser._id
                             const isFollowing = currentUser?.following?.includes(user._id)
@@ -264,7 +273,7 @@ const Connections = () => {
                                         </div>
                                     )}
                                     
-                                    <div className="p-4">
+                                    <div className="p-3 sm:p-4">
                                         {/* Profile Section */}
                                         <div className="flex flex-col items-center -mt-12 mb-4">
                                             {/* Avatar */}
@@ -321,51 +330,52 @@ const Connections = () => {
 
                                         {/* Action Buttons */}
                                         {!isCurrentUser && (
-                                            <div className="flex gap-2">
+                                            <div className="flex flex-wrap gap-2">
                                                 {activeTab === 'pending' ? (
                                                     <>
                                                         <button
                                                             onClick={() => handleAccept(user._id)}
                                                             disabled={isProcessing[user._id]}
-                                                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                         >
                                                             <Check className="w-4 h-4" />
-                                                            Accept
+                                                            <span>Accept</span>
                                                         </button>
                                                         <button
                                                             onClick={() => handleReject(user._id)}
                                                             disabled={isProcessing[user._id]}
-                                                            className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            className="flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                         >
                                                             <X className="w-4 h-4" />
+                                                            <span className="sm:hidden">Reject</span>
                                                         </button>
                                                     </>
                                                 ) : activeTab === 'all' ? (
                                                     <>
                                                         <button
                                                             onClick={() => handleMessage(user._id)}
-                                                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors"
+                                                            className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors"
                                                         >
                                                             <MessageCircle className="w-4 h-4" />
-                                                            Message
+                                                            <span>Message</span>
                                                         </button>
                                                         {isFollowing ? (
                                                             <button
                                                                 onClick={() => handleUnfollow(user._id)}
                                                                 disabled={isProcessing[user._id]}
-                                                                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                className="flex-1 min-w-[100px] flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                             >
                                                                 <UserX className="w-4 h-4" />
-                                                                Unfollow
+                                                                <span>Unfollow</span>
                                                             </button>
                                                         ) : (
                                                             <button
                                                                 onClick={() => handleFollow(user._id)}
                                                                 disabled={isProcessing[user._id]}
-                                                                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                className="flex-1 min-w-[100px] flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                             >
                                                                 <UserPlus className="w-4 h-4" />
-                                                                Follow
+                                                                <span>Follow</span>
                                                             </button>
                                                         )}
                                                     </>
@@ -375,26 +385,26 @@ const Connections = () => {
                                                             <button
                                                                 onClick={() => handleUnfollow(user._id)}
                                                                 disabled={isProcessing[user._id]}
-                                                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                             >
                                                                 <UserX className="w-4 h-4" />
-                                                                Unfollow
+                                                                <span>Unfollow</span>
                                                             </button>
                                                         ) : (
                                                             <button
                                                                 onClick={() => handleFollow(user._id)}
                                                                 disabled={isProcessing[user._id]}
-                                                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                             >
                                                                 <UserPlus className="w-4 h-4" />
-                                                                Follow
+                                                                <span>Follow</span>
                                                             </button>
                                                         )}
                                                         {!isConnected && (
                                                             <button
                                                                 onClick={() => handleSendRequest(user._id)}
                                                                 disabled={isProcessing[user._id]}
-                                                                className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                className="flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                                 title="Send Connection Request"
                                                             >
                                                                 <UserPlus className="w-4 h-4" />

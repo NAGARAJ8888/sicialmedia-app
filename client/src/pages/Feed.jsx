@@ -58,7 +58,7 @@ const Feed = () => {
       </div>
 
       {/* Right sidebar */}
-      <div className="w-full max-w-xs space-y-6">
+      <div className="w-full max-w-xs space-y-6 hidden xl:block">
         {/* Sponsored Section */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="p-4 pb-3 border-b border-gray-100">

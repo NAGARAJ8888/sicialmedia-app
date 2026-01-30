@@ -133,7 +133,7 @@ const StoryViewer = ({ open, stories = [], initialIndex = 0, onClose }) => {
       {/* backdrop */}
       <button
         type="button"
-        className="absolute inset-0 cursor-default"
+        className="absolute inset-0 cursor-default z-50"
         onClick={() => onClose?.()}
         aria-label="Close stories"
       />

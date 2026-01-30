@@ -3,6 +3,7 @@ import { Heart, MessageCircle, Share2, MoreVertical, Bookmark } from "lucide-rea
 import moment from "moment";
 import { useAuth } from "@clerk/clerk-react";
 import { useSelector, useDispatch } from "react-redux";
+import { Link } from "react-router-dom";
 import api from "../api/axios";
 import toast from "react-hot-toast";
 import { updatePost } from "../features/posts/postsSlice";
@@ -25,6 +26,9 @@ const Postcard = ({ post }) => {
   const likesCount = Array.isArray(post?.likes_count) ? post.likes_count.length : 0;
   const createdAt = post?.createdAt;
   const timeAgo = createdAt ? moment(createdAt).fromNow() : "";
+  
+  // Check if the post belongs to the current user
+  const isOwnPost = currentUser && user._id === currentUser._id;
 
   const [isLiked, setIsLiked] = useState(currentUser && post?.likes_count?.includes(currentUser._id));
   const [currentLikes, setCurrentLikes] = useState(likesCount);
@@ -103,7 +107,10 @@ const Postcard = ({ post }) => {
       {/* Header */}
       <div className="flex items-center justify-between p-4 pb-3">
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 shrink-0">
+          <Link 
+            to={`/app/profile/${user._id}`}
+            className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 shrink-0 hover:opacity-80 transition-opacity"
+          >
             {avatar ? (
               <img
                 src={avatar}
@@ -114,10 +121,15 @@ const Postcard = ({ post }) => {
             ) : (
               <div className="w-full h-full bg-gray-300" />
             )}
-          </div>
+          </Link>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
-              <p className="text-sm font-semibold text-gray-900 truncate">{name}</p>
+              <Link 
+                to={`/app/profile/${user._id}`}
+                className="text-sm font-semibold text-gray-900 hover:text-purple-600 transition-colors truncate"
+              >
+                {name}
+              </Link>
               {isVerified && (
                 <svg
                   className="w-4 h-4 text-blue-500 shrink-0"
@@ -143,13 +155,15 @@ const Postcard = ({ post }) => {
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition-colors shrink-0"
-          aria-label="More options"
-        >
-          <MoreVertical className="w-5 h-5" />
-        </button>
+        {isOwnPost && (
+          <button
+            type="button"
+            className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition-colors shrink-0"
+            aria-label="More options"
+          >
+            <MoreVertical className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
       {/* Content */}

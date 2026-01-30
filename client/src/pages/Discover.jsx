@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, TrendingUp, Hash, UserPlus, Users, Sparkles } from 'lucide-react'
+import { Search, TrendingUp, Hash, UserPlus, Users, Sparkles, X } from 'lucide-react'
 import Postcard from '../components/Postcard'
 import Loading from '../components/Loading'
 import { useSelector, useDispatch } from 'react-redux'
@@ -21,38 +21,97 @@ const Discover = () => {
     const discoverLoading = useSelector((state) => state.user.discoverLoading)
     const loading = useSelector((state) => state.posts.loading)
 
-    // Handle search on Enter key press
-    const handleSearch = async (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault()
-            if (searchQuery.trim()) {
-                try {
-                    const token = await getToken()
-                    if (token) {
-                        dispatch(discoverSearch({ token, searchQuery }))
-                    }
-                } catch (error) {
-                    console.error('Error during search:', error)
-                    toast.error('Failed to search')
+    // Handle search API call
+    const performSearch = async () => {
+        if (searchQuery.trim()) {
+            try {
+                const token = await getToken()
+                if (token) {
+                    dispatch(discoverSearch({ token, searchQuery }))
                 }
+            } catch (error) {
+                console.error('Error during search:', error)
+                toast.error('Failed to search')
             }
         }
     }
 
+    // Handle search on Enter key press
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            performSearch()
+        }
+    }
+
+    // Handle search button click
+    const handleSearchClick = () => {
+        performSearch()
+    }
+
+    // Clear search
+    const handleClearSearch = () => {
+        setSearchQuery('')
+    }
+
+    // Default trending hashtags
+    const defaultHashtags = [
+        { tag: 'Technology', count: 1234 },
+        { tag: 'Design', count: 987 },
+        { tag: 'Photography', count: 856 },
+        { tag: 'Travel', count: 743 },
+        { tag: 'Food', count: 692 },
+        { tag: 'Fashion', count: 621 },
+        { tag: 'Fitness', count: 589 },
+        { tag: 'Art', count: 534 },
+        { tag: 'Music', count: 478 },
+        { tag: 'Business', count: 445 },
+        { tag: 'Programming', count: 412 },
+        { tag: 'Marketing', count: 387 },
+        { tag: 'Education', count: 356 },
+        { tag: 'Nature', count: 334 },
+        { tag: 'Gaming', count: 312 },
+    ]
+
     const suggestedUsers = searchQuery.trim() 
-        ? discoverResults.users 
+        ? (discoverResults?.users || [])
         : []
 
-    const trendingHashtags = searchQuery.trim() 
-        ? discoverResults.hashtags 
-        : []
+    // Filter hashtags based on search query
+    const getFilteredHashtags = () => {
+        if (!searchQuery.trim()) {
+            return defaultHashtags
+        }
+        
+        const searchLower = searchQuery.toLowerCase()
+        
+        // Filter default hashtags based on search query
+        const filteredDefaults = defaultHashtags.filter(item => 
+            item.tag.toLowerCase().includes(searchLower)
+        )
+        
+        // Combine API results with filtered defaults (remove duplicates)
+        const apiHashtags = discoverResults?.hashtags || []
+        const combined = [...apiHashtags]
+        
+        filteredDefaults.forEach(defaultTag => {
+            const exists = combined.some(tag => 
+                tag.tag.toLowerCase() === defaultTag.tag.toLowerCase()
+            )
+            if (!exists) {
+                combined.push(defaultTag)
+            }
+        })
+        
+        return combined
+    }
 
     const filteredPosts = searchQuery.trim() 
-        ? discoverResults.posts 
+        ? (discoverResults?.posts || [])
         : posts
 
     const filteredUsers = suggestedUsers
-    const filteredHashtags = trendingHashtags
+    const filteredHashtags = getFilteredHashtags()
 
     const handleFollow = async (userId) => {
         try {
@@ -89,16 +148,33 @@ const Discover = () => {
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <input
                         type="text"
-                        placeholder="Search posts, people, hashtags... (Press Enter)"
+                        placeholder="Search posts, people, hashtags..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        onKeyDown={handleSearch}
-                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm text-gray-900 placeholder-gray-500"
+                        onKeyDown={handleKeyDown}
+                        className="w-full pl-10 pr-24 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm text-gray-900 placeholder-gray-500"
                     />
+                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
+                        {searchQuery && (
+                            <button
+                                onClick={handleClearSearch}
+                                className="p-1 hover:bg-gray-200 rounded-full transition-colors"
+                                aria-label="Clear search"
+                            >
+                                <X className="w-4 h-4 text-gray-500" />
+                            </button>
+                        )}
+                        <button
+                            onClick={handleSearchClick}
+                            className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-md transition-colors"
+                        >
+                            Search
+                        </button>
+                    </div>
                 </div>
 
                 {/* Filter Tabs */}
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                <div className="flex flex-wrap items-center gap-2 overflow-x-auto no-scrollbar">
                     {[
                         { id: 'all', label: 'All', icon: Sparkles },
                         { id: 'posts', label: 'Posts', icon: TrendingUp },
@@ -133,31 +209,50 @@ const Discover = () => {
                     {/* Trending Hashtags Section */}
                     {(activeFilter === 'all' || activeFilter === 'hashtags') && (
                         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                            <div className="p-4 pb-3 border-b border-gray-100 flex items-center gap-2">
-                                <TrendingUp className="w-5 h-5 text-purple-600" />
-                                <h2 className="text-sm font-semibold text-gray-900">Trending Hashtags</h2>
+                            <div className="p-4 pb-3 border-b border-gray-100 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <TrendingUp className="w-5 h-5 text-purple-600" />
+                                    <h2 className="text-sm font-semibold text-gray-900">
+                                        {searchQuery ? 'Search Results' : 'Trending Hashtags'}
+                                    </h2>
+                                </div>
+                                {searchQuery && filteredHashtags.length > 0 && (
+                                    <span className="text-xs text-gray-500">
+                                        {filteredHashtags.length} found
+                                    </span>
+                                )}
                             </div>
                             <div className="p-4">
                                 {filteredHashtags.length > 0 ? (
-                                    <div className="flex flex-wrap gap-2">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                                         {filteredHashtags.map((item, index) => (
                                             <Link
                                                 key={index}
                                                 to={`/app/discover?hashtag=${item.tag}`}
-                                                className="flex items-center gap-2 px-3 py-2 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors group"
+                                                className="flex items-center justify-between gap-2 px-4 py-3 bg-gradient-to-r from-purple-50 to-pink-50 hover:from-purple-100 hover:to-pink-100 rounded-lg transition-all group border border-purple-100 hover:border-purple-200 hover:shadow-sm"
                                             >
-                                                <Hash className="w-4 h-4 text-purple-600" />
-                                                <span className="text-sm font-medium text-purple-600 group-hover:text-purple-700">
-                                                    {item.tag}
-                                                </span>
-                                                <span className="text-xs text-gray-500">
-                                                    {item.count} {item.count === 1 ? 'post' : 'posts'}
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <div className="p-1.5 bg-white rounded-md group-hover:bg-purple-100 transition-colors">
+                                                        <Hash className="w-4 h-4 text-purple-600" />
+                                                    </div>
+                                                    <span className="text-sm font-semibold text-gray-900 truncate">
+                                                        {item.tag}
+                                                    </span>
+                                                </div>
+                                                <span className="text-xs font-medium text-purple-600 bg-white px-2 py-1 rounded-full shrink-0">
+                                                    {item.count >= 1000 ? `${(item.count / 1000).toFixed(1)}k` : item.count}
                                                 </span>
                                             </Link>
                                         ))}
                                     </div>
                                 ) : (
-                                    <p className="text-sm text-gray-500 text-center py-4">No trending hashtags found</p>
+                                    <div className="text-center py-8">
+                                        <Hash className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                                        <p className="text-sm font-semibold text-gray-900 mb-1">No hashtags found</p>
+                                        <p className="text-xs text-gray-500">
+                                            {searchQuery ? 'Try a different search term' : 'Check back later for trending hashtags'}
+                                        </p>
+                                    </div>
                                 )}
                             </div>
                         </div>
