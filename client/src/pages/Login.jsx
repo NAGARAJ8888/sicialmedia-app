@@ -1,5 +1,4 @@
 import React from 'react'
-import reactLogo from '../assets/react.svg'
 import { SignIn } from '@clerk/clerk-react'
 
 const Login = () => {
@@ -15,11 +14,9 @@ const Login = () => {
             <div className='flex-1 flex flex-col p-8 md:p-12 lg:p-16'>
                 {/* Logo at top left */}
                 <div className='mb-8 md:mb-12'>
-                    <img 
-                        src={reactLogo} 
-                        alt='Logo' 
-                        className='h-10 w-10 md:h-12 md:w-12'
-                    />
+                    <h1 className='text-3xl md:text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent'>
+                        Vibely
+                    </h1>
                 </div>
 
                 {/* Content at mid left */}
