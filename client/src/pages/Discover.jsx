@@ -12,6 +12,7 @@ import { discoverSearch } from '../features/user/userSlice'
 const Discover = () => {
     const [searchQuery, setSearchQuery] = useState('')
     const [activeFilter, setActiveFilter] = useState('all') // all, posts, people, hashtags
+    const [followedUsers, setFollowedUsers] = useState(new Set())
     const dispatch = useDispatch()
     const { getToken } = useAuth()
 
@@ -20,6 +21,13 @@ const Discover = () => {
     const discoverResults = useSelector((state) => state.user.discoverResults)
     const discoverLoading = useSelector((state) => state.user.discoverLoading)
     const loading = useSelector((state) => state.posts.loading)
+
+    // Initialize followed users from current user's following list
+    useEffect(() => {
+        if (currentUser?.following) {
+            setFollowedUsers(new Set(currentUser.following.map(user => user._id || user)))
+        }
+    }, [currentUser])
 
     // Handle search API call
     const performSearch = async () => {
@@ -117,17 +125,28 @@ const Discover = () => {
         try {
             const token = await getToken()
             if (token) {
-                const response = await api.post('/api/user/follow', 
+                const isFollowing = followedUsers.has(userId)
+                const endpoint = isFollowing ? '/api/user/unfollow' : '/api/user/follow'
+                const response = await api.post(endpoint, 
                     { followId: userId },
                     { headers: { Authorization: `Bearer ${token}` } }
                 )
                 if (response.data.success) {
-                    toast.success('Following user')
+                    // Update followed users state
+                    const newFollowedUsers = new Set(followedUsers)
+                    if (isFollowing) {
+                        newFollowedUsers.delete(userId)
+                        toast.success('Unfollowed user')
+                    } else {
+                        newFollowedUsers.add(userId)
+                        toast.success('Following user')
+                    }
+                    setFollowedUsers(newFollowedUsers)
                 }
             }
         } catch (error) {
-            toast.error('Failed to follow user')
-            console.error('Error following user:', error)
+            toast.error(followedUsers.has(userId) ? 'Failed to unfollow user' : 'Failed to follow user')
+            console.error('Error following/unfollowing user:', error)
         }
     }
 
@@ -313,10 +332,14 @@ const Discover = () => {
                                                 </div>
                                                 <button
                                                     onClick={() => handleFollow(user._id)}
-                                                    className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg transition-colors shrink-0 flex items-center gap-1"
+                                                    className={`px-4 py-1.5 text-white text-xs font-medium rounded-lg transition-colors shrink-0 flex items-center gap-1 ${
+                                                        followedUsers.has(user._id)
+                                                            ? 'bg-gray-400 hover:bg-gray-500'
+                                                            : 'bg-purple-600 hover:bg-purple-700'
+                                                    }`}
                                                 >
                                                     <UserPlus className="w-3.5 h-3.5" />
-                                                    Follow
+                                                    {followedUsers.has(user._id) ? 'Unfollow' : 'Follow'}
                                                 </button>
                                             </div>
                                         ))}

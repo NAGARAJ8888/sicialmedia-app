@@ -21,6 +21,7 @@ const Connections = () => {
     const [activeTab, setActiveTab] = useState('all')
     const [searchQuery, setSearchQuery] = useState('')
     const [isProcessing, setIsProcessing] = useState({})
+    const [pendingRequests, setPendingRequests] = useState(new Set())
 
     const connections = useSelector((state) => state.connections.connections || [])
     const followers = useSelector((state) => state.connections.followers || [])
@@ -28,6 +29,11 @@ const Connections = () => {
     const pending = useSelector((state) => state.connections.pendingConnections || [])
     const currentUser = useSelector((state) => state.user.value)
     const loading = useSelector((state) => state.connections.loading)
+
+    // keep local optimistic pending requests in sync with backend pending list
+    useEffect(() => {
+        setPendingRequests(new Set(pending.map(u => u._id || u)))
+    }, [pending])
 
     // Fetch connections on component mount
     useEffect(() => {
@@ -149,15 +155,23 @@ const Connections = () => {
 
     const handleSendRequest = async (userId) => {
         setIsProcessing(prev => ({ ...prev, [userId]: true }))
+        // optimistic: mark as pending locally immediately
+        setPendingRequests(prev => new Set(prev).add(userId))
         try {
             const token = await getToken()
             if (token) {
                 await dispatch(sendConnectionRequest({ token, id: userId }))
-                // Refresh connections so pending/connection lists update
+                // Refresh connections so pending/connection lists update from backend
                 await dispatch(fetchUserConnections(token))
                 toast.success('Connection request sent')
             }
         } catch (error) {
+            // revert optimistic pending on error
+            setPendingRequests(prev => {
+                const next = new Set(prev)
+                next.delete(userId)
+                return next
+            })
             console.error('Error sending connection request:', error)
             toast.error('Failed to send connection request')
         } finally {
@@ -249,9 +263,11 @@ const Connections = () => {
 
                         {filteredData.map((user) => {
                             const isCurrentUser = currentUser && user._id === currentUser._id
-                            const isFollowing = currentUser?.following?.includes(user._id)
+                            // When on 'following' tab, all displayed users are already being followed
+                            const isFollowing = activeTab === 'following' || currentUser?.following?.includes(user._id)
                             const isFollower = currentUser?.followers?.includes(user._id)
                             const isConnected = connections.some(c => c._id === user._id)
+                            const isPending = pendingRequests.has(user._id) || pending.some(p => p._id === user._id)
                             
                             return (
                                 <div
@@ -401,14 +417,23 @@ const Connections = () => {
                                                             </button>
                                                         )}
                                                         {!isConnected && (
-                                                            <button
-                                                                onClick={() => handleSendRequest(user._id)}
-                                                                disabled={isProcessing[user._id]}
-                                                                className="flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                title="Send Connection Request"
-                                                            >
-                                                                <UserPlus className="w-4 h-4" />
-                                                            </button>
+                                                            isPending ? (
+                                                                <button
+                                                                    disabled
+                                                                    className="flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg cursor-not-allowed"
+                                                                >
+                                                                    <span>Pending</span>
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => handleSendRequest(user._id)}
+                                                                    disabled={isProcessing[user._id] || pendingRequests.has(user._id)}
+                                                                    className="flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                    title="Send Connection Request"
+                                                                >
+                                                                    <UserPlus className="w-4 h-4" />
+                                                                </button>
+                                                            )
                                                         )}
                                                     </>
                                                 )}

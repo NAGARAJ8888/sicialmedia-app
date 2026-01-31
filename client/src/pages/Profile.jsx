@@ -6,6 +6,8 @@ import Loading from '../components/Loading'
 import ProfileModal from '../components/ProfileModal'
 import moment from 'moment'
 import { useSelector } from 'react-redux'
+import { useAuth } from '@clerk/clerk-react'
+import api from '../api/axios'
 
 const Profile = () => {
     const { profileId } = useParams()
@@ -24,6 +26,7 @@ const Profile = () => {
     const currentUser = useSelector((state) => state.user.value)
     const posts = useSelector((state) => state.posts.posts || [])
     const connections = useSelector((state) => state.connections.connections || [])
+    const { getToken } = useAuth()
 
     useEffect(() => {
         const fetchProfileData = async () => {
@@ -32,25 +35,52 @@ const Profile = () => {
                 return
             }
 
-            // Find the target user
             const targetUserId = profileId || currentUser._id
-            const user = targetUserId === currentUser._id 
-                ? currentUser 
-                : connections.find(u => u._id === targetUserId) || currentUser
-            
+
+            // If viewing own profile, use currentUser
+            if (targetUserId === currentUser._id) {
+                setProfileUser(currentUser)
+                const myPosts = posts.filter(post => post.user?._id === currentUser._id)
+                setUserPosts(myPosts)
+                setFollowersCount(currentUser.followers?.length || 0)
+                setFollowingCount(currentUser.following?.length || 0)
+                setIsFollowing(false)
+                setLoading(false)
+                return
+            }
+
+            // Try to find user in connections cache
+            let user = connections.find(u => u._id === targetUserId)
+
+            // If not found in cache, fetch from backend
+            if (!user) {
+                try {
+                    const token = await getToken()
+                    if (token) {
+                        const resp = await api.post('/api/user/profiles', { profileId: targetUserId }, { headers: { Authorization: `Bearer ${token}` } })
+                        if (resp.data.success) {
+                            user = resp.data.profile
+                            setUserPosts(resp.data.posts || [])
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch profile from backend', err)
+                }
+            } else {
+                // found in connections, filter posts from existing posts list
+                const filteredPosts = posts.filter(post => post.user?._id === user._id)
+                setUserPosts(filteredPosts)
+            }
+
+            // If still no user found, fallback to currentUser to avoid crash
+            if (!user) {
+                user = currentUser
+            }
+
             setProfileUser(user)
-            
-            // Filter posts by user
-            const filteredPosts = posts.filter(post => post.user?._id === user._id)
-            setUserPosts(filteredPosts)
-            
-            // Set followers/following counts
             setFollowersCount(user.followers?.length || 0)
             setFollowingCount(user.following?.length || 0)
-            
-            // Check if current user is following this profile
             setIsFollowing(currentUser.following?.includes(user._id) || false)
-            
             setLoading(false)
         }
         fetchProfileData()
