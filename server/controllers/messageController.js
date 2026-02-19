@@ -31,8 +31,7 @@ export const sseController = async (req, res) => {
 export const sendMessage = async (req, res) => {
     try {
       // Auth safety
-      const auth = req.auth?.();
-      const userId = auth?.userId;
+      const { userId } = await req.auth();
   
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
@@ -123,8 +122,7 @@ export const sendMessage = async (req, res) => {
 export const getChatMessages = async (req, res) => {
     try {
       // Auth safety
-      const auth = req.auth?.();
-      const userId = auth?.userId;
+      const { userId } = await req.auth();
   
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
@@ -163,8 +161,7 @@ export const getChatMessages = async (req, res) => {
 // Get recent messages (conversation list)
 export const getUserRecentMessages = async (req, res) => {
   try {
-    const auth = req.auth?.();
-    const userId = auth?.userId;
+    const { userId } = await req.auth();
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -263,8 +260,7 @@ export const getUserRecentMessages = async (req, res) => {
 export const markMessagesAsSeen = async (req, res) => {
     try {
       // Auth safety
-      const auth = req.auth?.();
-      const userId = auth?.userId;
+      const { userId } = await req.auth();
   
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
