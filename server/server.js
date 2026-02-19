@@ -14,7 +14,10 @@ const app = express();
 await connectDB();
 
 // CORS should be before other middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  credentials: true
+}));
 
 // Only parse JSON/urlencoded for non-multipart requests
 // This middleware will skip requests with Content-Type: multipart/form-data
