@@ -15,7 +15,7 @@ await connectDB();
 
 // CORS should be before other middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: process.env.FRONTEND_URL || 'https://social-media-appln.vercel.app',
   credentials: true
 }));
 
